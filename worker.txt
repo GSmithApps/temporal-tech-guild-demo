@@ -1,0 +1,42 @@
+import asyncio
+from datetime import timedelta
+import itertools
+
+from temporalio import activity, workflow
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+@activity.defn
+async def bill_customer(month: int):
+    print(f'billing customer for month {month}')
+
+
+@workflow.defn
+class MonthlyCharge:
+
+    @workflow.run
+    async def run(self):
+
+        for month in itertools.count(1):
+            await workflow.execute_activity(
+                bill_customer,
+                month,
+                start_to_close_timeout=timedelta(seconds=5),
+            )
+            await asyncio.sleep(1.5)
+
+
+async def main():
+
+    client = await Client.connect("localhost:7233")
+
+    await Worker(
+        client,
+        task_queue="monthly-charge-task-queue",
+        workflows=[MonthlyCharge],
+        activities=[bill_customer],
+    ).run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
